@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PapelUsuario {
+  ADMINISTRADOR
+  OPERADOR_CADASTRO
+  GESTOR_ALMOXARIFADO
+  AUDITOR
+}
+
+enum StatusContrato {
+  ATIVO
+  ENCERRADO
+}
+enum StatusLote {
+  RECEBIDO
+  EM_TRIAGEM
+  TRIADO
+  FINALIZADO
+}
+enum TipoEquipamento {
+  COMPUTADOR
+  NOTEBOOK
+  CELULAR
+  TABLET
+  IMPRESSORA
+  OUTRO
+}
+enum EstadoFisico {
+  INSERVIVEL
+  PESSIMO
+  RUIM
+  REGULAR
+  BOM
+}
+enum StatusRastreamento {
+  RECEBIDO
+  EM_TRIAGEM
+  APTO_REUSO
+  APTO_RECICLAGEM
+  EM_DESMONTE
+  DESCARTADO
+}
+
+model Usuario {
+  id           String          @id @default(uuid()) @db.Uuid
+  login        String          @unique
+  nome         String
+  senhaSalt    String
+  senhaHash    String
+  papel        PapelUsuario
+  ativo        Boolean         @default(true)
+  criadoEm     DateTime        @default(now())
+  movimentacoes Movimentacao[]
+  versao       Int             @default(1)
+}
+
+model Organizacao {
+  id          String     @id @default(uuid()) @db.Uuid
+  razaoSocial String
+  nomeFantasia String
+  cnpj        String     @unique
+  criadaEm    DateTime   @default(now())
+  ativa       Boolean    @default(true)
+  contrato    Contrato?
+  lotes       Lote[]
+  versao      Int        @default(1)
+}
+
+model Contrato {
+  id            String         @id @default(uuid()) @db.Uuid
+  organizacaoId String         @unique @db.Uuid
+  organizacao   Organizacao    @relation(fields: [organizacaoId], references: [id], onDelete: Restrict)
+  codigo        String         @unique
+  clausulas     Json?
+  valor         Decimal        @default(0) @db.Decimal(12, 2)
+  dataInicio    DateTime       @db.Date
+  dataFim       DateTime?      @db.Date
+  status        StatusContrato @default(ATIVO)
+  criadoEm      DateTime       @default(now())
+  lotes         Lote[]
+  versao        Int            @default(1)
+}
+
+model Lote {
+  id              String      @id @default(uuid()) @db.Uuid
+  organizacaoId   String      @db.Uuid
+  organizacao     Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Restrict)
+  contratoId      String      @db.Uuid
+  contrato        Contrato    @relation(fields: [contratoId], references: [id], onDelete: Restrict)
+  numeroNotaFiscal String
+  transportadora  String
+  dataEntrada    DateTime    @db.Date
+  status         StatusLote  @default(RECEBIDO)
+  criadoEm       DateTime    @default(now())
+  equipamentos   Equipamento[]
+  versao         Int         @default(1)
+}
+
+model Equipamento {
+  id                  String             @id @default(uuid()) @db.Uuid
+  loteId              String             @db.Uuid
+  lote                Lote               @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  codigoBarrasInterno String             @unique
+  tipo                TipoEquipamento
+  estadoFisico        EstadoFisico
+  status              StatusRastreamento @default(RECEBIDO)
+  triagemCompleta     Boolean            @default(false)
+  criadoEm            DateTime           @default(now())
+  movimentacoes       Movimentacao[]
+  versao              Int                @default(1)
+}
+
+model Movimentacao {
+  id                    String             @id @default(uuid()) @db.Uuid
+  equipamentoId         String             @db.Uuid
+  equipamento           Equipamento        @relation(fields: [equipamentoId], references: [id], onDelete: Restrict)
+  usuarioId             String             @db.Uuid
+  usuario               Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  data                  DateTime           @default(now())
+  statusAnterior        StatusRastreamento
+  statusNovo            StatusRastreamento
+  estadoFisicoAnterior  EstadoFisico
+  estadoFisicoNovo      EstadoFisico
+  justificativa         String?
+  observacao            String?
+  versao                Int                @default(1)
+}
+
+model ConfiguracaoGlobal {
+  id                    String   @id @default("global")
+  aliquotaImposto       Decimal  @default(0) @db.Decimal(5, 4)
+  coeficienteDepreciacao Decimal  @default(0) @db.Decimal(5, 4)
+  atualizadoEm          DateTime @updatedAt
+  versao                Int      @default(1)
+}

@@ -1,0 +1,405 @@
+==============================================================
+ AV2 - GREENCODE: INSTRUCOES PASSO A PASSO
+ (fiel ao PDF do Prof. Eng. Dr. Gerson Penha, a partir do
+  ponto em que o projeto se encontra)
+==============================================================
+
+LEGENDA
+  [PDF]   = o que o documento pede ou sugere.
+  [PRATICA] = detalhe de execucao que NAO esta no PDF, incluido
+              so para voce conseguir fazer.
+
+
+--------------------------------------------------------------
+SITUACAO ATUAL (JA FEITO)
+--------------------------------------------------------------
+[x] Pasta AV2 criada dentro da pasta AV's (onde esta a AV1).
+[x] PostgreSQL instalado e banco "greencode" criado.
+[x] Arquivo .env criado na raiz da AV2.
+[x] Arquivo .gitignore criado na raiz da AV2.
+[ ] A AV1 serve como REFERENCIA (modelo de dominio, regras,
+    validacoes). Nao e para alterar a AV1.
+
+OBJETIVO [PDF]
+  Transformar o greencode de aplicacao CLI com arquivos
+  criptografados em um SERVIDOR MONOLITICO HTTP, com API RESTful,
+  banco relacional e multiplos usuarios simultaneos.
+  Pilha: Node.js + TypeScript + Fastify (ou Express) + Prisma ORM
+  + PostgreSQL.
+
+
+==============================================================
+ FASE A - PREPARAR O PROJETO
+==============================================================
+
+PASSO 1 - Abrir o terminal na pasta AV2   [PRATICA]
+  - No VS Code, clique com o botao direito na pasta AV2 e escolha
+    "Open in Integrated Terminal".
+  - Confira que o caminho do terminal termina com AV2.
+  - Teste: node -v  e  npm -v  (devem mostrar versoes).
+
+PASSO 2 - Criar o projeto Node + TypeScript   [PDF: Node.js e
+          TypeScript]
+  npm init -y
+  npm i -D typescript tsx @types/node
+  npx tsc --init
+  - No tsconfig.json: target ES2022, module NodeNext,
+    moduleResolution NodeNext, strict true, rootDir src,
+    outDir dist, esModuleInterop true.
+  - No package.json, scripts:
+      "dev":   "tsx watch src/server.ts"
+      "build": "tsc"
+      "start": "node dist/server.js"
+  - Confira se o .gitignore tem: node_modules, dist, .env
+  - Git: se a pasta AV's ja for um repositorio, NAO rode git init
+    na AV2 (evita repositorio dentro de repositorio).
+
+PASSO 3 - Estudar a AV1 antes de codar   [PDF: "consolidara as
+          abstracoes orientadas a objetos que projetou
+          anteriormente"]
+  Levantar da AV1 e anotar:
+   a) Entidades e campos: Organizacao, Contrato, Lote,
+      Equipamento, Movimentacao (e Usuario).
+   b) Regras de transicao de status dos equipamentos.
+   c) Calculos financeiros.
+   d) Validacoes (CNPJ, codigo de barras, contrato, etc.).
+   e) Autenticacao: como era a sessao/expiracao e qual biblioteca
+      de hash de senha foi usada (o PDF manda usar a MESMA, ex.:
+      bcrypt).
+   f) Cenarios de teste/validacao (viram o seed no Passo 17).
+  Dica Codex: diga a ele "crie tudo dentro da pasta AV2; use a
+  AV1 apenas como referencia, sem alterar".
+
+PASSO 4 - Definir a estrutura em camadas   [PDF: Controller-
+          Service-Repository]
+  Sugestao de pastas dentro da AV2:
+    src/
+      server.ts           (inicia o servidor)
+      app.ts              (monta o Fastify)
+      config/             (variaveis de ambiente)
+      plugins/            (jwt, prisma, documentacao)
+      modules/
+        auth/ organizacao/ contrato/ lote/ equipamento/
+        movimentacao/
+          (cada modulo com controller, service, repository,
+           rotas e schemas)
+      shared/             (erros e utilitarios)
+    prisma/
+      schema.prisma
+      seed.ts
+  Papel de cada camada [PDF]:
+   - Controller: recebe a requisicao HTTP, interpreta parametros
+     e delega ao service.
+   - Service: toda a logica de negocio (validacoes, transicao de
+     status, calculos financeiros).
+   - Repository: usa o Prisma Client; ponte entre dominio e
+     tabelas.
+  Por que [PDF]: a logica de negocio fica imune a mudancas na
+  interface (HTTP, CLI ou mensageria no futuro).
+
+PASSO 5 - Configurar variaveis de ambiente   [PDF: porta
+          configuravel por variavel de ambiente]
+  - Abra o .env (raiz da AV2) e deixe, no minimo:
+      PORT=3333
+      DATABASE_URL="postgresql://postgres:SUA_SENHA@localhost:5432/greencode"
+      JWT_SECRET="uma-chave-longa-e-aleatoria"
+      JWT_EXPIRES_IN="1h"
+  - Troque SUA_SENHA pela senha do usuario postgres.
+  - [PRATICA] Crie tambem um .env.example (sem segredos) e use
+    dotenv (e, se quiser, zod) para ler e validar as variaveis.
+
+
+==============================================================
+ FASE B - BANCO DE DADOS (PRISMA + POSTGRESQL)
+==============================================================
+
+PASSO 6 - Instalar e iniciar o Prisma   [PDF: Prisma ORM]
+  npm i @prisma/client
+  npm i -D prisma
+  npx prisma init
+  - Depois do init, abra o .env e confira se a DATABASE_URL e a
+    sua (o init pode ter colocado uma URL de exemplo).
+  - Se a sua versao do Prisma gerar prisma.config.ts ou pedir
+    "driver adapter", siga a documentacao da versao instalada.
+
+PASSO 7 - Escrever o schema.prisma   [PDF: replicar o modelo de
+          dominio]
+  Modelos: Organizacao, Contrato, Lote, Equipamento, Movimentacao
+  (+ Usuario para o login).
+  Relacionamentos [PDF]:
+    - Organizacao tem 1 Contrato OPCIONAL e MUITOS Lotes.
+    - Lote tem MUITOS Equipamentos.
+    - Equipamento tem MUITAS Movimentacoes.
+  Tambem [PDF]:
+    - Campo "versao" em cada modelo (versionamento otimista).
+    - Unique em CNPJ e em codigoBarrasInterno.
+    - Tipos avancados do PostgreSQL: UUID para ids; JSON para
+      dados semiestruturados, como as clausulas dos contratos.
+  Exemplo de partida (ajuste aos campos da sua AV1):
+
+    generator client { provider = "prisma-client-js" }
+    datasource db { provider = "postgresql"  url = env("DATABASE_URL") }
+
+    enum Papel { ADMIN OPERADOR }
+
+    model Usuario {
+      id        String @id @default(uuid())
+      email     String @unique
+      senhaHash String
+      papel     Papel  @default(OPERADOR)
+      versao    Int    @default(1)
+    }
+    model Organizacao {
+      id       String    @id @default(uuid())
+      nome     String
+      cnpj     String    @unique
+      contrato Contrato?
+      lotes    Lote[]
+      versao   Int       @default(1)
+    }
+    model Contrato {
+      id            String      @id @default(uuid())
+      organizacaoId String      @unique
+      organizacao   Organizacao @relation(fields: [organizacaoId], references: [id])
+      clausulas     Json?
+      valor         Decimal     @db.Decimal(12, 2)
+      inicio        DateTime
+      fim           DateTime?
+      versao        Int         @default(1)
+    }
+    model Lote {
+      id            String        @id @default(uuid())
+      organizacaoId String
+      organizacao   Organizacao   @relation(fields: [organizacaoId], references: [id])
+      equipamentos  Equipamento[]
+      versao        Int           @default(1)
+    }
+    model Equipamento {
+      id                  String         @id @default(uuid())
+      codigoBarrasInterno String         @unique
+      status              String
+      loteId              String
+      lote                Lote           @relation(fields: [loteId], references: [id])
+      movimentacoes       Movimentacao[]
+      versao              Int            @default(1)
+    }
+    model Movimentacao {
+      id            String      @id @default(uuid())
+      equipamentoId String
+      equipamento   Equipamento @relation(fields: [equipamentoId], references: [id])
+      statusAnterior String
+      statusNovo     String
+      criadoEm      DateTime    @default(now())
+      versao        Int         @default(1)
+    }
+
+  (Os status podem virar enum conforme as regras da sua AV1.)
+
+PASSO 8 - Criar a primeira migracao   [PDF: migracoes
+          versionadas]
+  npx prisma migrate dev --name init
+  npx prisma generate
+  - As migracoes geram arquivos SQL que descrevem as alteracoes
+    e permitem evoluir o banco de forma controlada.
+  - Se criar as tabelas sem erro, a conexao esta correta.
+  - Para ver as tabelas: npx prisma studio  (ou pgAdmin).
+
+
+==============================================================
+ FASE C - SERVIDOR HTTP
+==============================================================
+
+PASSO 9 - Montar o servidor Fastify   [PDF: Fastify recomendado;
+          Express aceito]
+  npm i fastify
+  - Criar app.ts que monta o Fastify com logging, registra
+    plugins e rotas (arquitetura baseada em plugins).
+  - Rotas declaradas de forma declarativa, com hooks para
+    autenticacao e logging.
+  - Criar um plugin que instancia UM PrismaClient e o disponibiliza
+    para os repositories.
+  - Rota de teste: GET /health -> { "status": "ok" }.
+  - Se optar por Express, lembre de AVALIAR e JUSTIFICAR
+    (escalabilidade e complexidade das validacoes).
+
+PASSO 10 - Porta por variavel de ambiente e graceful shutdown
+           [PDF]
+  - server.ts le PORT do .env e inicia o servidor.
+  - Graceful shutdown: ao receber SIGINT/SIGTERM, parar de aceitar
+    novas conexoes, finalizar as ativas, fechar o Prisma e so
+    entao encerrar o processo.
+  - Teste: npm run dev, abrir /health, dar Ctrl+C e ver o log de
+    encerramento.
+
+PASSO 11 - Tratamento de erros padronizado   [PRATICA, apoia o
+           PDF: "tratamento de erros mais estruturado"]
+  - Erros de negocio (400/422), nao encontrado (404), conflito
+    (409), nao autenticado (401), sem permissao (403).
+  - Um error handler converte tudo em JSON padronizado.
+  - Erros do Prisma: P2002 (unique violado) -> 409;
+    P2025 (nao encontrado) -> 404.
+
+
+==============================================================
+ FASE D - REGRAS DE NEGOCIO (CAMADAS)
+==============================================================
+
+PASSO 12 - Repositories (Prisma Client)   [PDF]
+  - Um repository por modulo: criar, buscar, listar, atualizar,
+    remover.
+  - So essa camada conhece o Prisma.
+  - Usar eager loading (include) e selecao de campos (select)
+    para otimizar as consultas.
+  - Permitir receber o cliente de transacao (tx) como parametro.
+
+PASSO 13 - Services (logica de negocio)   [PDF]
+  Trazer da AV1 para os services:
+   - validacoes;
+   - regras de transicao de status dos equipamentos;
+   - calculos financeiros.
+  Services nao conhecem HTTP (nao usam request/reply).
+
+PASSO 14 - Transacoes   [PDF: $transaction]
+  Usar prisma.$transaction nas operacoes que precisam ser
+  "tudo ou nada":
+   - criar um lote com a adicao de varios equipamentos;
+   - atualizar o status de um equipamento COM o registro da
+     movimentacao.
+  Objetivo [PDF]: manter a integridade referencial; alteracoes
+  confirmadas juntas ou nenhuma persistida.
+
+PASSO 15 - Versionamento otimista   [PDF]
+  - Em todo update, filtrar pelo id E pela versao lida, e
+    incrementar a versao.
+  - Se nenhuma linha for atualizada, devolver conflito (409):
+    alguem alterou o registro antes.
+  - Objetivo [PDF]: evitar atualizacoes perdidas.
+
+PASSO 16 - Controllers e rotas REST   [PDF]
+  - Controllers finos: recebem a requisicao, interpretam
+    parametros, delegam ao service, devolvem a resposta.
+  - Validar entrada com JSON Schema do Fastify (body, params,
+    querystring, response).
+  - Rotas por recurso (organizacoes, contrato, lotes,
+    equipamentos, movimentacoes) com codigos HTTP corretos
+    (200, 201, 204, 400, 401, 403, 404, 409).
+
+
+==============================================================
+ FASE E - SEGURANCA
+==============================================================
+
+PASSO 17 - Autenticacao com JWT   [PDF]
+  npm i @fastify/jwt
+  npm i bcrypt   (use a MESMA biblioteca de hash que usou na AV1;
+                  se bcrypt nativo falhar no Windows, bcryptjs tem
+                  a mesma API)
+  - A API e stateless: as sessoes do CLI sao substituidas por
+    JWT.
+  - Fluxo de login [PDF]:
+      1. Receber as credenciais.
+      2. Verificar o hash da senha armazenado no banco.
+      3. Em caso de sucesso, gerar token JWT com o identificador
+         do usuario e o papel.
+      4. Enviar o token ao cliente.
+      5. O cliente inclui o token no cabecalho Authorization em
+         todas as requisicoes seguintes.
+  - Hook/middleware global do Fastify valida o token em cada
+    requisicao e injeta os dados do usuario no objeto de
+    requisicao (login e /health ficam publicos).
+
+PASSO 18 - Autorizacao por papel   [PDF]
+  - Os services consultam o papel do usuario para aplicar as
+    regras de autorizacao (ex.: ADMIN x OPERADOR).
+  - Papel insuficiente -> 403.
+
+
+==============================================================
+ FASE F - DADOS, VALIDACOES E QUALIDADE
+==============================================================
+
+PASSO 19 - Script de seed   [PDF]
+  - Em package.json: "prisma": { "seed": "tsx prisma/seed.ts" }
+  - O seed popula o banco com massa de dados representativa:
+    organizacoes, contratos, lotes e equipamentos com ESTADOS
+    VARIADOS (e usuarios com senha em hash).
+  - Os dados devem refletir os cenarios de validacao da AV1,
+    para conferir se as regras foram transportadas corretamente.
+  - Rodar: npx prisma db seed
+
+PASSO 20 - Restricoes no banco   [PDF]
+  - Unicidade em CNPJ e codigoBarrasInterno (ja no schema).
+  - Triggers ou constraints para impedir estados inconsistentes.
+    [PRATICA] Criar migracao so com SQL:
+      npx prisma migrate dev --create-only --name constraints
+    e editar o .sql (ex.: CHECK de datas e de valor do contrato),
+    depois rodar npx prisma migrate dev.
+  - Aproveitar para REVISAR e APRIMORAR as validacoes da AV1.
+
+PASSO 21 - Testes   [PRATICA]
+  - Testar services (transicoes de status, calculos) e a API
+    (login, criar lote, conflito de versao, 401/403).
+  - Usar um banco de teste separado.
+
+
+==============================================================
+ FASE G - DOCUMENTACAO E ENTREGA
+==============================================================
+
+PASSO 22 - Documentar a API   [PDF: "API documentada"]
+  - Ex.: @fastify/swagger e @fastify/swagger-ui (doc em /docs,
+    gerada dos schemas das rotas).
+  - README com: instalar, configurar .env, criar banco, rodar
+    migracoes e seed, iniciar o servidor, exemplos de uso.
+
+PASSO 23 - Compatibilidade   [PDF]
+  O sistema deve rodar em:
+   - Windows 10 ou superior;
+   - Linux Ubuntu 24.04.03 ou superior;
+   - distribuicoes derivadas do Ubuntu.
+  [PRATICA] Usar path.join, evitar comandos so de Linux nos
+  scripts, finais de linha consistentes, testar nos dois
+  sistemas (ou WSL/VM Ubuntu) e documentar no README.
+
+PASSO 24 - Justificar as decisoes   [PDF: mais importante que o
+           codigo]
+  Escreva um documento (ex.: ARQUITETURA.md) com, para cada
+  escolha: o que escolheu, por que, alternativas rejeitadas e
+  trade-offs. Sugestao de itens:
+   - Monolito x microsservicos (e os LIMITES do monolito, que o
+     PDF pede para refletir).
+   - Camadas Controller-Service-Repository.
+   - Fastify x Express.
+   - PostgreSQL (x MySQL / arquivos criptografados).
+   - Prisma ORM.
+   - JWT stateless x sessoes.
+   - Transacoes e versionamento otimista.
+   - Constraints no banco alem da validacao na aplicacao.
+
+
+--------------------------------------------------------------
+CHECKLIST FINAL (conforme o PDF)
+--------------------------------------------------------------
+[ ] Servidor HTTP (Fastify ou Express) com porta por variavel
+    de ambiente
+[ ] Graceful shutdown
+[ ] Camadas Controller / Service / Repository
+[ ] schema.prisma: Organizacao, Contrato, Lote, Equipamento,
+    Movimentacao com relacionamentos corretos
+[ ] PostgreSQL com migracoes versionadas
+[ ] Login com hash (mesma biblioteca da AV1) + JWT com id e papel
+[ ] Hook que valida o token e injeta o usuario na requisicao
+[ ] Autorizacao por papel nos services
+[ ] $transaction nas operacoes compostas
+[ ] Campo versao + verificacao antes de cada atualizacao
+[ ] Seed com estados variados refletindo os cenarios da AV1
+[ ] Unique em CNPJ e codigoBarrasInterno
+[ ] Triggers/constraints contra estados inconsistentes
+[ ] API documentada
+[ ] Compativel com Windows 10+, Ubuntu 24.04.03+ e derivados
+[ ] Justificativa das decisoes, trade-offs e alternativas
+    rejeitadas
+
+==============================================================
+ FIM
+==============================================================

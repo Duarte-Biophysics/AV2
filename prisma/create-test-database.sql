@@ -1,0 +1,1 @@
+CREATE DATABASE greencode_av2_test WITH TEMPLATE template0 ENCODING 'UTF8';

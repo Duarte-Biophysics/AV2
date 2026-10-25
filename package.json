@@ -1,0 +1,39 @@
+{
+  "name": "greencode-av2",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node -r ./scripts/tsx-compat.cjs ./node_modules/tsx/dist/cli.mjs watch src/server.ts",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.seed.json && tsc -p tsconfig.test.json",
+    "start": "node dist/server.js",
+    "test": "npm run build && node scripts/run-tests.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "prisma db seed"
+  },
+  "prisma": {
+    "seed": "node dist-seed/prisma/seed.js"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "prisma": "^6.19.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@fastify/jwt": "^10.2.5",
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^6.1.2",
+    "@prisma/client": "^6.19.3",
+    "dotenv": "^18.0.9",
+    "fastify": "^5.12.7",
+    "fastify-plugin": "^6.0.1"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true,
+    "esbuild@0.28.2": true
+  }
+}
