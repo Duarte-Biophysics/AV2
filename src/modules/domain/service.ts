@@ -81,6 +81,18 @@ export class DomainService {
     const pwd = hashPassword(input.senha);
     return this.repo.createUser({ login: input.login.trim().toLowerCase(), nome: input.nome.trim(), papel: input.papel, senhaSalt: pwd.salt, senhaHash: pwd.hash });
   }
+  users(user: { papel: PapelUsuario }) {
+    this.allow(user, ["ADMINISTRADOR"]);
+    return this.repo.users();
+  }
+  async setUserActive(user: { papel: PapelUsuario }, id: string, ativo: boolean) {
+    this.allow(user, ["ADMINISTRADOR"]);
+    const result = await this.repo.setUserActive(id, ativo);
+    if (!result) throw notFound("Usuario nao encontrado.");
+    if ("ultimoAdministrador" in result) throw new AppError("Nao e permitido desativar o ultimo administrador ativo.");
+    if ("conflito" in result) throw conflict("Usuario alterado por outra requisicao; recarregue e tente novamente.");
+    return result.usuario;
+  }
   async getGlobalConfiguration(user: { papel: PapelUsuario }) {
     this.allow(user, ["ADMINISTRADOR"]);
     return (await this.repo.globalConfiguration()) ?? { id: "global", aliquotaImposto: 0, coeficienteDepreciacao: 0, atualizadoEm: new Date(0), versao: 1 };

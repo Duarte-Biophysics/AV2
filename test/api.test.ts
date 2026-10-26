@@ -43,6 +43,41 @@ describe("API GreenCode", () => {
     assert.equal(result.statusCode, 403);
   });
 
+  it("permite ao administrador listar e desativar usuarios, revogando o acesso", async () => {
+    const adminLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { login: "admin@greencode.local", senha: password } });
+    const adminAuthorization = { authorization: `Bearer ${adminLogin.json().token as string}` };
+    const login = `cli-${Date.now()}@greencode.local`;
+    const created = await app.inject({
+      method: "POST",
+      url: "/usuarios",
+      headers: adminAuthorization,
+      payload: { login, nome: "Usuario de teste", senha: "Senha123!", papel: "AUDITOR" },
+    });
+    assert.equal(created.statusCode, 201);
+    const userId = created.json().id as string;
+    const userLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { login, senha: "Senha123!" } });
+    assert.equal(userLogin.statusCode, 200);
+    const listed = await app.inject({ method: "GET", url: "/usuarios", headers: adminAuthorization });
+    assert.equal(listed.statusCode, 200);
+    const listedUser = (listed.json() as Array<Record<string, unknown>>).find(item => item.id === userId);
+    assert.ok(listedUser);
+    assert.equal("senhaHash" in listedUser, false);
+    const disabled = await app.inject({
+      method: "PATCH",
+      url: `/usuarios/${userId}`,
+      headers: adminAuthorization,
+      payload: { ativo: false },
+    });
+    assert.equal(disabled.statusCode, 200);
+    assert.equal(disabled.json().ativo, false);
+    const rejected = await app.inject({
+      method: "GET",
+      url: "/organizacoes",
+      headers: { authorization: `Bearer ${userLogin.json().token as string}` },
+    });
+    assert.equal(rejected.statusCode, 401);
+  });
+
   it("entrega equipamentos com estados variados do seed", async () => {
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { login: "admin@greencode.local", senha: password } });
     const result = await app.inject({ method: "GET", url: "/equipamentos", headers: { authorization: `Bearer ${login.json().token}` } });

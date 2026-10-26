@@ -14,6 +14,8 @@ export async function registerControllers(app: FastifyInstance) {
   const auth = new AuthService(app);
   app.post("/auth/login", { config: { public: true }, schema: { tags: ["auth"], body: { type: "object", required: ["login", "senha"], properties: { login: { type: "string", minLength: 3 }, senha: { type: "string", minLength: 1 } } } } }, async req => auth.login((req.body as any).login, (req.body as any).senha));
   app.post("/usuarios", { schema: { tags: ["usuarios"], body: { type: "object", required: ["login", "nome", "senha", "papel"], properties: { login: { type: "string", minLength: 3, maxLength: 64 }, nome: { type: "string", minLength: 1 }, senha: { type: "string", minLength: 4 }, papel: { type: "string", enum: ["ADMINISTRADOR", "OPERADOR_CADASTRO", "GESTOR_ALMOXARIFADO", "AUDITOR"] } } } } }, async (req, reply) => reply.code(201).send(await domain.createUser(user(req), req.body)));
+  app.get("/usuarios", { schema: { tags: ["usuarios"] } }, req => domain.users(user(req)));
+  app.patch("/usuarios/:id", { schema: { tags: ["usuarios"], params: idParams, body: { type: "object", required: ["ativo"], properties: { ativo: { type: "boolean" } } } } }, req => domain.setUserActive(user(req), (req.params as any).id, (req.body as any).ativo));
   app.get("/configuracao-global", { schema: { tags: ["sistema"] } }, req => domain.getGlobalConfiguration(user(req)));
   app.patch("/configuracao-global", { schema: { tags: ["sistema"], body: { type: "object", required: ["versao", "data"], properties: { versao: versionSchema, data: { type: "object", required: ["aliquotaImposto", "coeficienteDepreciacao"], properties: { aliquotaImposto: { type: "number", minimum: 0, maximum: 1 }, coeficienteDepreciacao: { type: "number", minimum: 0, maximum: 1 } }, minProperties: 2 } } } } }, req => domain.updateGlobalConfiguration(user(req), req.body));
 
@@ -40,7 +42,7 @@ export async function registerControllers(app: FastifyInstance) {
   app.get("/movimentacoes", { schema: { tags: ["movimentacoes"], querystring: { type: "object", properties: { equipamentoId: { type: "string", format: "uuid" } } } } }, req => domain.movements(user(req), (req.query as any).equipamentoId));
   app.setErrorHandler((error, _req, reply) => {
     const err = error as any;
-    const statusCode = error instanceof AppError ? error.statusCode : ["P2002", "P2003"].includes(err.code) ? 409 : err.code === "P2025" ? 404 : err.validation ? 400 : 500;
+    const statusCode = error instanceof AppError ? error.statusCode : ["P2002", "P2003", "P2034"].includes(err.code) ? 409 : err.code === "P2025" ? 404 : err.validation ? 400 : 500;
     app.log[statusCode >= 500 ? "error" : "info"](error);
     reply.code(statusCode).send({ error: statusCode === 500 ? "Erro interno do servidor." : (error instanceof Error ? error.message : "Erro na requisicao."), statusCode });
   });

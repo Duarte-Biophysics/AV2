@@ -7,6 +7,7 @@
     "dev": "node -r ./scripts/tsx-compat.cjs ./node_modules/tsx/dist/cli.mjs watch src/server.ts",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.seed.json && tsc -p tsconfig.test.json",
     "start": "node dist/server.js",
+    "cli": "node dist/cli/main.js",
     "test": "npm run build && node scripts/run-tests.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

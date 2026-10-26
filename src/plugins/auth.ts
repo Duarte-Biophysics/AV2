@@ -16,6 +16,11 @@ async function registerAuth(app: FastifyInstance) {
     if (routeIsPublic || request.url.startsWith("/docs")) return;
     try { await request.jwtVerify(); request.currentUser = request.user; }
     catch { throw unauthorized("Token ausente, invalido ou expirado."); }
+    const account = await app.prisma.usuario.findUnique({ where: { id: request.user.sub }, select: { ativo: true, papel: true } });
+    if (!account?.ativo || account.papel !== request.user.papel) {
+      request.currentUser = null;
+      throw unauthorized("Token ausente, invalido ou expirado.");
+    }
   });
 }
 

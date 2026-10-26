@@ -15,6 +15,23 @@ export class DomainRepository {
   createLot(tx: Prisma.TransactionClient, data: Prisma.LoteCreateInput) { return tx.lote.create({ data }); }
   createEquipment(tx: Prisma.TransactionClient, data: Prisma.EquipamentoCreateInput) { return tx.equipamento.create({ data }); }
   createUser(data: Prisma.UsuarioCreateInput) { return this.db.usuario.create({ data, select: { id: true, login: true, nome: true, papel: true, ativo: true, versao: true } }); }
+  users() { return this.db.usuario.findMany({ select: { id: true, login: true, nome: true, papel: true, ativo: true, versao: true, criadoEm: true }, orderBy: { criadoEm: "desc" } }); }
+  async setUserActive(id: string, ativo: boolean) {
+    return this.db.$transaction(async tx => {
+      const usuario = await tx.usuario.findUnique({ where: { id }, select: { id: true, papel: true, ativo: true, versao: true } });
+      if (!usuario) return null;
+      if (!ativo && usuario.papel === "ADMINISTRADOR" && usuario.ativo) {
+        const administradoresAtivos = await tx.usuario.count({ where: { papel: "ADMINISTRADOR", ativo: true } });
+        if (administradoresAtivos <= 1) return { ultimoAdministrador: true as const };
+      }
+      const atualizado = await tx.usuario.updateMany({
+        where: { id, versao: usuario.versao },
+        data: { ativo, versao: { increment: 1 } },
+      });
+      if (!atualizado.count) return { conflito: true as const };
+      return { usuario: await tx.usuario.findUniqueOrThrow({ where: { id }, select: { id: true, login: true, nome: true, papel: true, ativo: true, versao: true, criadoEm: true } }) };
+    }, { isolationLevel: "Serializable" });
+  }
   async updateVersioned(model: "organizacao" | "contrato" | "lote", id: string, versao: number, data: Record<string, unknown>) {
     return (this.db[model] as any).updateMany({ where: { id, versao }, data: { ...data, versao: { increment: 1 } } });
   }
