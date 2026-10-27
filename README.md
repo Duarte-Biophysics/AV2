@@ -95,6 +95,25 @@ Com o servidor em execução:
 
 Abra `/docs` no navegador para conhecer as operações e enviar requisições. Para acessar as rotas protegidas, primeiro faça login pela operação `POST /auth/login` com um dos usuários de demonstração. Use o token retornado no cabeçalho `Authorization` das requisições seguintes.
 
+### Fazer login e autorizar chamadas no Swagger
+
+1. Abra `POST /auth/login`, clique em **Try it out** e informe o login e a senha de uma conta cadastrada. Por exemplo, se os dados demonstrativos foram preparados e a senha padrão não foi alterada:
+
+   ```json
+   {
+     "login": "admin@greencode.local",
+     "senha": "GreenCode123!"
+   }
+   ```
+
+2. Clique em **Execute**. Se o login der certo, a resposta terá código `200`. Na seção **Response body**, localize o campo `"token"` e copie somente o valor entre aspas (a sequência longa que começa normalmente com `eyJ`).
+
+3. Clique em **Authorize** (ícone de cadeado do Swagger), cole o valor do token e confirme. No campo de autorização do Swagger, não inclua aspas nem escreva `Bearer`.
+
+4. Agora execute as operações protegidas, como `GET /usuarios` (somente administrador) ou `GET /organizacoes`. Se o token expirar ou a API responder `401`, faça login novamente e autorize com o token novo.
+
+Se `POST /auth/login` responder `401`, confira o login e a senha. Os usuários de demonstração só existem depois que os dados iniciais foram criados; a senha pode ter sido definida pela variável `SEED_PASSWORD`. Trate o token como uma credencial: não o compartilhe nem publique capturas que o mostrem.
+
 Usuários de demonstração:
 
 | Login | Papel |
