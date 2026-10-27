@@ -1,7 +1,5 @@
 # GreenCode AV2
 
-GreenCode AV2 é uma API REST para cadastro e rastreabilidade de equipamentos eletrônicos. Ela permite organizar dados de organizações, contratos, lotes, equipamentos e movimentações, com acesso controlado por usuários e permissões.
-
 A AV2 é um serviço HTTP. Para consultar e usar as operações, acesse a documentação interativa da API pelo navegador, use um cliente HTTP ou inicie a interface CLI incluída no projeto.
 
 ## O que você precisa
